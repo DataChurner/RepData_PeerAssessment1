@@ -22,35 +22,38 @@ setwd("~/Course 5 -Reproducible Research/Week 2/repdata_data_activity")
 actdata <- read.csv("activity.csv",na.strings = NA)
 ```
 
-Make a copy of the original dataframe for future use.
+We will now be converting the date variable from a factor into a date format variable.
 
 ```r
-newactdata <- actdata
+actdata$date <- as.Date(strftime(actdata$date,format = "%Y-%m-%d"))
 ```
-We will now be converting the combination of the date and interval variable into a datetime variable, in case we need to extract any components of time like hour of the day, day of the week etc.
-
-The str_pad function of the stringr package is used to left pad the variable with 0's and the paste function is used to add a seperator for the hour and minute, and strftime to bind it all together, and finally convert it into a POSIXct format.
+Validate the data types
 
 ```r
-actdata$datetime <- as.POSIXct(strftime(paste(actdata$date,paste(substr(str_pad(actdata$interval,4,"0",side="left"),1,2),substr(str_pad(actdata$interval,4,"0",side="left"),3,4),sep = ":"),format = "%Y-%m-%d %H:%M")))
+str(actdata)
+```
+
+```
+## 'data.frame':	17568 obs. of  3 variables:
+##  $ steps   : int  NA NA NA NA NA NA NA NA NA NA ...
+##  $ date    : Date, format: "2012-10-01" "2012-10-01" ...
+##  $ interval: int  0 5 10 15 20 25 30 35 40 45 ...
 ```
 
 ## What is mean total number of steps taken per day?
 
 ### Get the sum(step) by date
-We will now calculate steps per day into another dataframe,
-then add a new variable called datecount for better display. 
+We will now calculate steps per day into another dataframe.
 
 ```r
 stepssum <- actdata %>% group_by(date) %>% summarise(steps = sum(steps)) %>% arrange(date) 
-stepssum$datecount <- c(1:61)
 ```
 ### Plotting the total steps by day histogram
 Lets start off by creating a histogram of the steps taken per day for the two months
 and then calculate the mean and the median.
 
 ```r
-qplot(datecount,steps,data=stepssum)+geom_bar(colour="black",stat = "identity")+geom_point(na.rm = TRUE)+scale_x_continuous(breaks = round(seq(min(stepssum$datecount), max(stepssum$datecount), by = 2),1))
+qplot(stepssum$steps,geom = "histogram" , binwidth = 1000)
 ```
 
 <img src="PA1_template_files/figure-html/unnamed-chunk-6-1.png" width="950px" />
@@ -130,29 +133,50 @@ sum(is.na(actdata$steps))
 ```
 ### Cleanup strategy
 Now, the dataset presented to us, had missing values represented by NA
-Since steps is an integer count of the human action of walking, we can fill in the missing values with an integer default of 0. We can do that by executing the following code.
+Since steps is an integer count of the human action of walking, we can fill in the missing values with a value that is the average steps of that interval
 
-Use the copy of the activity data performed earlier, for this step.
+Make a copy of the original dataframe.
 
 ```r
-newactdata[is.na(newactdata$steps),"steps"] <- 0
+newactdata <- actdata  %>% arrange(date,interval)
 ```
-We will now calculate steps per day into another dataframe,
-then add a new variable called datecount for better display. 
+### Impute the data
+We will find the average of the interval by refering to the stepsavg dataframe created earlier, replace the NA values by the average steps for the interval, rounded to two decimal points
+
+```r
+combined <- merge(x=actdata,y=stepsavg,by="interval",all.x = TRUE)
+subord <- combined %>% filter(is.na(steps.x)) %>% arrange(date,interval)
+newactdata[is.na(newactdata$steps),"steps"] <- round(subord$steps.y,2)
+```
+Lets check the new data table (note: the averages populated in steps)
+
+```r
+head(newactdata)
+```
+
+```
+##   steps       date interval
+## 1  1.72 2012-10-01        0
+## 2  0.34 2012-10-01        5
+## 3  0.13 2012-10-01       10
+## 4  0.15 2012-10-01       15
+## 5  0.08 2012-10-01       20
+## 6  2.09 2012-10-01       25
+```
+We will now calculate imputed steps per day into another dataframe.
 
 ```r
 newstepssum <- newactdata %>% group_by(date) %>% summarise(steps = sum(steps)) %>% arrange(date) 
-newstepssum$datecount <- c(1:61)
 ```
-### Plot the histogram
-The Histogram of the average steps to date is as below.
-(note: the dates that has no data point in the earlier histogram, has a data point at 0 steps)
+### Plot the imputed histogram
+The Histogram of the imputed average steps to date is as below.
+(note: we have )
 
 ```r
-qplot(datecount,steps,data=newstepssum)+geom_bar(colour="black",stat = "identity")+geom_point(na.rm = TRUE)+scale_x_continuous(breaks = round(seq(min(newstepssum$datecount), max(newstepssum$datecount), by = 2),1))
+qplot(newstepssum$steps,geom = "histogram", binwidth = 1000)
 ```
 
-<img src="PA1_template_files/figure-html/unnamed-chunk-15-1.png" width="950px" />
+<img src="PA1_template_files/figure-html/unnamed-chunk-17-1.png" width="950px" />
 
 ### Getting the mean
 The Average number of steps as calculated by the mean function in a day is :
@@ -162,7 +186,7 @@ mean(newstepssum$steps)
 ```
 
 ```
-## [1] 9354.23
+## [1] 10766.18
 ```
 ### Getting the median
 The Median observation of steps in the given dataset as calculated by the median function is :
@@ -172,7 +196,7 @@ median(newstepssum$steps)
 ```
 
 ```
-## [1] 10395
+## [1] 10766.13
 ```
 
 ## Are there differences in activity patterns between weekdays and weekends?
@@ -189,8 +213,32 @@ Create a new variable, day and assign it a value "weekday" or "weekend" by perfo
 (note: again the logical output of true or false will be considered 1 or 0 from internal representataion)
 
 ```r
-newactdata$day <- daylbl[(weekdays(as.POSIXct(strftime(newactdata$date,format = "%Y-%m-%d"))) %in% wknd)+1]
+newactdata$day <- daylbl[(weekdays(newactdata$date) %in% wknd)+1]
 ```
+Lets check the new column
+
+```r
+str(newactdata)
+```
+
+```
+## 'data.frame':	17568 obs. of  4 variables:
+##  $ steps   : num  1.72 0.34 0.13 0.15 0.08 2.09 0.53 0.87 0 1.47 ...
+##  $ date    : Date, format: "2012-10-01" "2012-10-01" ...
+##  $ interval: int  0 5 10 15 20 25 30 35 40 45 ...
+##  $ day     : chr  "weekday" "weekday" "weekday" "weekday" ...
+```
+Lets further check the content of the new column added 
+(note: we have both weekday and weekend data)
+
+```r
+unique(newactdata$day)
+```
+
+```
+## [1] "weekday" "weekend"
+```
+
 ### Calculate the average steps per weekday/weekend per interval
 A timeseries plot of the dataset will generate a line plot of the average of the steps for a given interval across all weekdays in one panel, and weekends in another.
 
@@ -208,7 +256,7 @@ we can now compare and contrast the activity pattern of the persons weekday and 
 qplot(interval,steps,data=newstepsavg,facets = day~.)+geom_line(colour="black",stat = "identity")+scale_x_continuous(breaks = round(seq(min(newstepsavg$interval), max(newstepsavg$interval), by = 200),1))
 ```
 
-<img src="PA1_template_files/figure-html/unnamed-chunk-21-1.png" width="950px" />
+<img src="PA1_template_files/figure-html/unnamed-chunk-25-1.png" width="950px" />
 
 ## Findings
 
